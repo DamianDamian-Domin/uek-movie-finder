@@ -23,9 +23,7 @@
 
       <p-dialog v-model:visible="showResults" modal header="Your results" :style="{ width: '80%' }">
         <div class="w-full ">
-          <p-datatable v-if="movies.length" :value="movies" tableStyle="min-width: 50rem" :paginator="true" :rows="6"
-          paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
-          currentPageReportTemplate="{first} to {last} of {totalRecords}">
+          <p-datatable v-if="movies.length" :value="movies" tableStyle="min-width: 50rem" :paginator="true" :rows="6">
             <p-column field="title" header="Title"></p-column>
             <p-column field="genre" header="Genre"></p-column>
             <p-column field="uri" header="DBPedia link">
@@ -79,9 +77,8 @@
           }
 
           const selectedGenres = ref([])
-
           const selectGenre = (name) => {
-            if (selectedGenres.length >= 5) {
+            if (selectedGenres.length >= genresLimit) {
               return
             }
             let indexToMove = genres.value.findIndex(genre => genre.name === name)
@@ -105,7 +102,6 @@
             const genresFormatted = (selectedGenres.value.map(genre => genre.name)).join(',')
             const response = await fetch(`${backendAddress}/movies?genres=${genresFormatted}`)
             const responseData = await response.json()
-            console.log(responseData)
             movies.value = responseData
             moviesLoading.value = false
             showResults.value = true
@@ -154,8 +150,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Lato&display=swap');
 body {
     font-size: 14px;
-    /* background: linear-gradient(to right, #F0F4C3, #A3E4D7); */
-    /* background-color: white; */
     background: repeating-linear-gradient(
     45deg,
     #adadad50,
