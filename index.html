@@ -1,38 +1,174 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <title>PrimeVue + CDN</title>
+    <title>Movie Finder</title>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
+    <link rel="stylesheet" href="https://unpkg.com/primeflex@latest/primeflex.css">    
     <link rel="stylesheet" href="https://unpkg.com/primevue/resources/themes/lara-light-green/theme.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/primeicons/7.0.0/primeicons.css" integrity="sha512-TrpBJRPu1GwAu1cMDKEHnDbLCnciebxralpA806EEIdNpmbuCAi0hZRBdbNHVl2fgOW96lnYyLIPqY/iL2saNg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="icon" type="image/x-icon" href="/assets/favicon.ico">
   </head>
   <body>
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
     <script src="https://unpkg.com/primevue/core/core.min.js"></script>
-    <script src="https://unpkg.com/primevue/calendar/calendar.min.js"></script>
+    
+    <script src="https://unpkg.com/primevue/autocomplete/autocomplete.min.js"></script>
+    <script src="https://unpkg.com/primevue/datatable/datatable.min.js"></script>
+    <script src="https://unpkg.com/primevue/column/column.min.js"></script>
 
-    <div id="app">
-      <p-datepicker v-model="date"></p-datepicker>
-      <br /><br />
-      {{ date }}
+
+
+    <div class="flex flex-column align-items-center gap-5 h-full" id="app">
+
+      <p-dialog v-model:visible="showResults" modal header="Your results" :style="{ width: '80%' }">
+        <div class="w-full ">
+          <p-datatable v-if="movies.length" :value="movies" tableStyle="min-width: 50rem" :paginator="true" :rows="6"
+          paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
+          currentPageReportTemplate="{first} to {last} of {totalRecords}">
+            <p-column field="title" header="Title"></p-column>
+            <p-column field="genre" header="Genre"></p-column>
+            <p-column field="uri" header="DBPedia link">
+              <template #body="slotProps">
+                <a target="_blank" :href="slotProps.data.uri"> {{slotProps.data.uri}}</a>
+              </template>
+            </p-column>
+          </p-datatable>
+          <div v-else class="flex justify-content-center">
+            <h4> No movies found, try to select different categories. </h4>
+          </div>
+        </div>
+      </p-dialog>
+
+
+      <img class="w-18rem sm:w-30rem" src="./assets/logo.svg" alt="app_logo">
+      <span class="text-700 text-xl sm:w-10 w-12 text-justify"> MovieFinder is a tool that allows you to easily search for movies based on film categories. Utilizing the <b>DBpedia</b> database, it provides quick and accurate results. Feel free to start by selecting categories or filtering them using the input below. </span>
+      <div class="flex flex-row flex-wrap gap-4 justify-content-center ">
+        <div @click="removeGenre(genre.name)" v-for="genre in selectedGenres" :key="genre.name" class="genre-card w-12rem h-6 bg-green-200 shadow-2 flex justify-content-center align-items-center p-4 border-round-sm cursor-pointer hover:bg-red-100 transition-duration-200"> {{ genre.name }} </div>
+        <div class="flex align-items-center">
+          <p-button :loading="moviesLoading" @click="getMovies()" v-if="selectedGenres.length" @click="findMovies" text icon="pi pi-search" severity="secondary"   label="Find movies"></p-button>
+        </div>
+      </div>
+      
+      <div class="flex flex-column  w-full justify-content-center align-items-center">
+        <p-inputtext id="filter" placeholder="Filter genres 🔎" class="min-w-15rem max-w-30rem w-full" size="small" v-model="filterInput"></p-inputtext>
+        <div class="ml-auto">
+          <h4 class="text-700"> Selected genres: {{selectedGenres.length}}/{{genresLimit}}</h4>
+        </div>
+      </div>
+      <div class="flex flex-row flex-wrap gap-4 justify-content-center max-h-27rem overflow-auto py-1">
+        <div @click="selectGenre(genre.name)" v-for="genre in filteredGenres" :key="genre.name" :class="{disabled : selectedGenres.length >= genresLimit}" class="genre-card bg-white w-12rem h-6 shadow-2 flex justify-content-center align-items-center p-4 border-round-sm cursor-pointer hover:bg-green-100 transition-all transition-duration-200"> <b>{{ genre.name }}</b> </div>
+      </div>
     </div>
 
     <script>
-      const { createApp, ref } = Vue;
+      const { createApp, ref, onMounted, computed, watch } = Vue;
+      const backendAddress = "http://127.0.0.1:5000"
 
       const app = createApp({
         setup() {
-          const date = ref();
+          const genresLimit = 5
+          const filterInput = ref(null)
+          const genres = ref(null)
+          
+          const filteredGenres = computed(() => filterInput.value ? genres.value.filter(obj => obj.name.toLowerCase().includes(filterInput.value.toLowerCase())) : genres.value )
+          const getGenres = async () => {
+            const response = await fetch(`${backendAddress}/genres`)
+            const responseData = await response.json()
+            genres.value = responseData
+          }
+
+          const selectedGenres = ref([])
+
+          const selectGenre = (name) => {
+            if (selectedGenres.length >= 5) {
+              return
+            }
+            let indexToMove = genres.value.findIndex(genre => genre.name === name)
+            if (indexToMove !== -1) {
+              selectedGenres.value.push(genres.value.splice(indexToMove, 1)[0])
+            }
+          }
+
+          const removeGenre = (name) => {
+            let indexToMove = selectedGenres.value.findIndex(genre => genre.name === name)
+            if (indexToMove !== -1) {
+              genres.value.push(selectedGenres.value.splice(indexToMove, 1)[0])
+            }
+          }
+
+          const movies = ref(null)
+          const moviesLoading = ref(false)
+          const showResults = ref(false)
+          const getMovies = async () => {
+            moviesLoading.value = true
+            const genresFormatted = (selectedGenres.value.map(genre => genre.name)).join(',')
+            const response = await fetch(`${backendAddress}/movies?genres=${genresFormatted}`)
+            const responseData = await response.json()
+            console.log(responseData)
+            movies.value = responseData
+            moviesLoading.value = false
+            showResults.value = true
+          }
+
+
+          watch(genres, (newGenres) => {
+            newGenres.sort((a, b) => a.name.localeCompare(b.name));
+          }, {deep: true});
+
+          onMounted(() => {
+            getGenres()
+          })
           return {
-            date,
+            filterInput,
+            genresLimit,
+            getGenres,
+            genres,
+            filteredGenres,
+            selectedGenres,
+            selectGenre,
+            removeGenre,
+            getMovies,
+            moviesLoading,
+            movies,
+            showResults
           };
         },
       });
 
       app.use(primevue.config.default);
-      app.component('p-datepicker', primevue.calendar);
-
+      app.component('p-inputtext', primevue.inputtext);
+      app.component('p-autocomplete', primevue.autocomplete);
+      app.component('p-button', primevue.button);
+      app.component('p-datatable', primevue.datatable);
+      app.component('p-column', primevue.column);
+      app.component('p-dialog', primevue.dialog);
       app.mount('#app');
+
+
     </script>
   </body>
 </html>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Lato&display=swap');
+body {
+    font-size: 14px;
+    /* background: linear-gradient(to right, #F0F4C3, #A3E4D7); */
+    /* background-color: white; */
+    background: repeating-linear-gradient(
+    45deg,
+    #adadad50,
+    #ffffff7c 2px,
+    #ffffff57 15px,
+    #ffffff5d 15px
+    );
+    padding: 1rem 1rem;
+    font-family: 'Lato', sans-serif;    
+}
+.disabled {
+  background-color: rgb(190, 190, 190) !important;
+  pointer-events: none !important;
+}
+
+</style>

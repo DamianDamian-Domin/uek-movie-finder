@@ -1,7 +1,9 @@
 from SPARQLWrapper import SPARQLWrapper, JSON
 from flask import Flask, request
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 
 def get_genres(lang='en'):
@@ -79,10 +81,10 @@ def genres_view():
 
 @app.route('/movies', methods=['GET'])
 def movies_view():
-    genres = request.args.getlist('genre')
+    genres = request.args.get('genres')
     limit = request.args.get('limit', 100)
     lang = request.args.get('lang', 'en')
-    movies = get_movies(genres=genres, limit=limit, lang=lang)
+    movies = get_movies(genres=genres.split(','), limit=limit, lang=lang)
     return movies
 
 
